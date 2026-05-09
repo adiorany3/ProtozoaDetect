@@ -1,4 +1,4 @@
-# Deteksi Protozoa Template Oval v7
+# Deteksi Protozoa
 
 Versi ini memakai **multi-angle oval template matching**.
 
