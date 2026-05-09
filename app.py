@@ -2,7 +2,12 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
-from detector import count_protozoa, draw_detections, make_debug_grid, image_quality_report
+from detector import (
+    count_protozoa,
+    draw_detections,
+    make_debug_grid,
+    image_quality_report
+)
 
 
 st.set_page_config(
@@ -15,8 +20,8 @@ FOOTER = "Created by Galuh Adi Insani"
 
 st.title("🔬 Sistem Deteksi dan Penghitung Jumlah Protozoa")
 st.write(
-    "Upload gambar mikroskop protozoa. Sistem akan menghitung objek protozoa "
-    "menggunakan preprocessing adaptif, segmentasi, watershed, dan filter bentuk."
+    "Versi ini memakai pendekatan **whole-body detection**, sehingga sistem berusaha "
+    "menghitung satu badan protozoa utuh, bukan tekstur/organ kecil di dalam tubuhnya."
 )
 
 with st.expander("📌 Kriteria gambar yang baik agar hasil lebih presisi", expanded=True):
@@ -24,14 +29,14 @@ with st.expander("📌 Kriteria gambar yang baik agar hasil lebih presisi", expa
         """
         **Agar deteksi protozoa lebih akurat, gunakan gambar dengan kondisi berikut:**
 
-        1. **Fokus jelas**, bentuk tepi protozoa terlihat dan tidak blur.
-        2. **Kontras cukup**, protozoa harus terlihat berbeda dari background.
-        3. **Pencahayaan merata**, hindari area terlalu gelap/terang pada satu sisi.
+        1. **Fokus jelas**, tepi badan protozoa terlihat dan tidak blur.
+        2. **Kontras cukup**, badan protozoa berbeda jelas dari background.
+        3. **Pencahayaan merata**, hindari sisi gambar terlalu gelap atau terlalu terang.
         4. **Background bersih**, minim kotoran, gelembung, bercak, dan debris.
-        5. **Objek tidak terlalu menumpuk**, protozoa yang saling bertumpuk sulit dipisahkan.
+        5. **Objek tidak terlalu menumpuk**, protozoa yang saling menempel/tumpang tindih sulit dipisahkan.
         6. **Resolusi cukup**, disarankan minimal 300 px pada sisi terpendek.
-        7. **Skala pembesaran konsisten**, supaya filter ukuran objek lebih stabil.
-        8. **Hindari kompresi berat**, gambar buram dari screenshot/WhatsApp dapat mengurangi akurasi.
+        7. **Skala pembesaran konsisten**, supaya filter ukuran badan lebih stabil.
+        8. **Hindari kompresi berat**, gambar dari screenshot/WhatsApp yang buram dapat mengurangi akurasi.
         9. **Ambil beberapa bidang pandang**, lalu gunakan rata-rata untuk estimasi yang lebih representatif.
         """
     )
@@ -41,7 +46,8 @@ uploaded_file = st.file_uploader(
     type=["jpg", "jpeg", "png"]
 )
 
-st.sidebar.header("⚙️ Pengaturan")
+st.sidebar.header("⚙️ Pengaturan Deteksi")
+
 mode = st.sidebar.selectbox(
     "Mode objek",
     ["Auto", "Objek gelap di background terang", "Objek terang di background gelap"],
@@ -54,32 +60,50 @@ sensitivity = st.sidebar.slider(
     max_value=2.00,
     value=1.00,
     step=0.05,
-    help="Naikkan jika protozoa banyak yang belum terdeteksi. Turunkan jika noise ikut terhitung."
+    help="Naikkan jika protozoa banyak yang belum terdeteksi. Turunkan jika noise/bagian tubuh ikut terhitung."
+)
+
+merge_strength = st.sidebar.slider(
+    "Penggabungan bagian tubuh",
+    min_value=0.50,
+    max_value=2.00,
+    value=1.20,
+    step=0.05,
+    help="Naikkan jika satu protozoa masih terpecah menjadi beberapa bagian."
 )
 
 min_area_ratio = st.sidebar.slider(
-    "Ukuran minimum objek",
-    min_value=0.00001,
-    max_value=0.00200,
-    value=0.00008,
-    step=0.00001,
+    "Ukuran minimum badan",
+    min_value=0.00005,
+    max_value=0.00500,
+    value=0.00035,
+    step=0.00005,
     format="%.5f",
-    help="Naikkan jika banyak titik kecil/noise ikut terhitung."
+    help="Naikkan jika bagian kecil/noise masih ikut terhitung."
 )
 
 max_area_ratio = st.sidebar.slider(
-    "Ukuran maksimum objek",
-    min_value=0.001,
-    max_value=0.100,
-    value=0.030,
-    step=0.001,
+    "Ukuran maksimum badan",
+    min_value=0.005,
+    max_value=0.120,
+    value=0.055,
+    step=0.005,
     format="%.3f",
-    help="Turunkan jika area besar/debris ikut terhitung."
+    help="Turunkan jika cluster besar ikut dihitung sebagai satu objek."
 )
 
 split_touching = st.sidebar.checkbox(
-    "Pisahkan objek yang saling menempel",
+    "Pisahkan protozoa yang saling menempel",
     value=True
+)
+
+split_strength = st.sidebar.slider(
+    "Kekuatan pemisahan objek menempel",
+    min_value=0.25,
+    max_value=0.65,
+    value=0.42,
+    step=0.01,
+    help="Naikkan agar pemisahan lebih konservatif. Turunkan jika objek menempel belum terpisah."
 )
 
 show_debug = st.checkbox("Tampilkan proses deteksi", value=True)
@@ -93,9 +117,11 @@ if uploaded_file is not None:
         image_rgb,
         mode=mode,
         sensitivity=sensitivity,
+        merge_strength=merge_strength,
         min_area_ratio=min_area_ratio,
         max_area_ratio=max_area_ratio,
-        split_touching=split_touching
+        split_touching=split_touching,
+        split_strength=split_strength
     )
 
     output = draw_detections(image_rgb, result["detections"])
@@ -112,6 +138,12 @@ if uploaded_file is not None:
 
     st.success(f"Jumlah protozoa terdeteksi: {result['count']}")
 
+    st.info(
+        "Jika hasil masih menghitung bagian dalam tubuh protozoa, naikkan "
+        "**Ukuran minimum badan** dan **Penggabungan bagian tubuh**. "
+        "Jika protozoa menempel belum terpisah, turunkan sedikit **Kekuatan pemisahan objek menempel**."
+    )
+
     if show_quality:
         st.subheader("Analisis Kualitas Gambar")
         for item in image_quality_report(image_rgb):
@@ -124,6 +156,10 @@ if uploaded_file is not None:
 
     if show_debug:
         st.subheader("Debug Visual")
+        st.write(
+            "Perhatikan bagian **Whole Body Mask**. Mask yang baik harus menutup badan protozoa secara utuh, "
+            "bukan hanya tekstur/bercak kecil di dalam badannya."
+        )
         debug_grid = make_debug_grid(result["debug"])
         st.image(debug_grid, use_container_width=True)
 
