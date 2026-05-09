@@ -1,184 +1,100 @@
-import os
-from pathlib import Path
-
-import cv2
 import numpy as np
 import streamlit as st
 from PIL import Image
 
-try:
-    from ultralytics import YOLO
-except Exception:
-    YOLO = None
+from detector import (
+    template_match_protozoa,
+    draw_detections,
+    make_debug_grid,
+    image_quality_report
+)
 
-
-FOOTER = "Created by Galuh Adi Insani"
 
 st.set_page_config(
-    page_title="YOLO Deteksi Protozoa",
+    page_title="Deteksi Jumlah Protozoa",
     page_icon="🔬",
     layout="wide"
 )
 
-st.title("🔬 YOLO Deteksi dan Penghitung Jumlah Protozoa")
+FOOTER = "Created by Galuh Adi Insani"
+
+st.title("🔬 Deteksi Jumlah Protozoa — Template Oval v7")
 st.write(
-    "Aplikasi ini menggunakan model YOLO custom untuk mendeteksi protozoa. "
-    "Untuk hasil terbaik, gunakan model hasil training dari dataset protozoa yang sudah diberi label bounding box."
+    "Versi ini memakai **multi-angle oval template matching**. "
+    "Metode ini lebih cocok untuk protozoa berbentuk oval/daun dan mengurangi kesalahan menghitung tekstur di dalam badan."
 )
 
-with st.expander("📌 Cara agar YOLO akurat", expanded=True):
+with st.expander("📌 Keterangan gambar yang baik", expanded=True):
     st.markdown(
         """
-        **YOLO akan jauh lebih akurat jika dilatih dengan dataset protozoa milikmu sendiri.**
-
-        Dataset ideal:
-        1. Minimal **100–300 gambar** dari mikroskop yang sama atau mirip.
-        2. Setiap protozoa diberi label **bounding box satu badan utuh**.
-        3. Jangan memberi label pada tekstur/organ kecil di dalam badan.
-        4. Label juga protozoa yang sebagian terlihat di pinggir gambar jika ingin ikut dihitung.
-        5. Variasikan gambar: terang, gelap, blur ringan, protozoa rapat, protozoa terpisah.
-        6. Pisahkan data menjadi **train** dan **val**.
-        7. Gunakan gambar asli, jangan terlalu terkompres.
+        Agar hasil lebih presisi:
+        1. Protozoa terlihat sebagai badan oval/daun yang cukup jelas.
+        2. Tepi badan tidak terlalu blur.
+        3. Kontras antara objek dan background cukup.
+        4. Pencahayaan merata.
+        5. Objek tidak terlalu bertumpuk.
+        6. Gunakan pembesaran yang konsisten.
+        7. Hindari kompresi gambar berlebihan.
         """
     )
 
-if YOLO is None:
-    st.error(
-        "Package ultralytics belum terpasang. Jalankan: pip install -r requirements.txt"
-    )
-    st.stop()
-
-st.sidebar.header("⚙️ Pengaturan YOLO")
-
-default_weight = "weights/best.pt"
-weight_path = st.sidebar.text_input(
-    "Path model YOLO",
-    value=default_weight,
-    help="Isi dengan path model hasil training, misalnya weights/best.pt"
-)
-
-confidence = st.sidebar.slider(
-    "Confidence threshold",
-    min_value=0.05,
-    max_value=0.95,
-    value=0.25,
-    step=0.01,
-    help="Turunkan jika protozoa banyak yang belum terdeteksi. Naikkan jika terlalu banyak false positive."
-)
-
-iou = st.sidebar.slider(
-    "IoU threshold",
-    min_value=0.10,
-    max_value=0.95,
-    value=0.45,
-    step=0.01,
-    help="Atur NMS. Naikkan jika objek rapat sering hilang, turunkan jika satu objek terdeteksi ganda."
-)
-
-imgsz = st.sidebar.selectbox(
-    "Ukuran input YOLO",
-    [416, 512, 640, 768, 960, 1024, 1280],
-    index=2,
-    help="Ukuran lebih besar bisa membantu objek kecil, tetapi lebih berat."
-)
-
-uploaded_file = st.file_uploader(
+uploaded = st.file_uploader(
     "Upload gambar protozoa",
     type=["jpg", "jpeg", "png"]
 )
 
-@st.cache_resource
-def load_model(path):
-    return YOLO(path)
+st.sidebar.header("⚙️ Pengaturan Deteksi")
 
+threshold = st.sidebar.slider(
+    "Threshold kemiripan bentuk",
+    min_value=0.30,
+    max_value=0.80,
+    value=0.55,
+    step=0.01,
+    help="Turunkan jika protozoa kurang terdeteksi. Naikkan jika terlalu banyak noise terhitung."
+)
 
-def draw_boxes(image_rgb, results):
-    output = image_rgb.copy()
-    count = 0
-    table = []
+min_distance = st.sidebar.slider(
+    "Jarak minimum antar protozoa",
+    min_value=15,
+    max_value=100,
+    value=45,
+    step=1,
+    help="Turunkan jika protozoa rapat belum terpisah. Naikkan jika satu protozoa terhitung ganda."
+)
 
-    if len(results) == 0:
-        return output, count, table
+min_scale = st.sidebar.slider(
+    "Skala minimum objek",
+    min_value=0.50,
+    max_value=1.50,
+    value=0.85,
+    step=0.05
+)
 
-    result = results[0]
+max_scale = st.sidebar.slider(
+    "Skala maksimum objek",
+    min_value=0.70,
+    max_value=2.00,
+    value=1.15,
+    step=0.05
+)
 
-    if result.boxes is None:
-        return output, count, table
+show_debug = st.checkbox("Tampilkan proses deteksi", value=True)
+show_quality = st.checkbox("Tampilkan analisis kualitas gambar", value=True)
 
-    boxes = result.boxes
-
-    for idx, box in enumerate(boxes, start=1):
-        xyxy = box.xyxy[0].cpu().numpy().astype(int)
-        conf = float(box.conf[0].cpu().numpy())
-        cls_id = int(box.cls[0].cpu().numpy())
-
-        x1, y1, x2, y2 = xyxy
-
-        count += 1
-
-        cv2.rectangle(
-            output,
-            (x1, y1),
-            (x2, y2),
-            (0, 255, 0),
-            2
-        )
-
-        label = f"{idx} {conf:.2f}"
-        cv2.putText(
-            output,
-            label,
-            (x1, max(20, y1 - 8)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.55,
-            (255, 0, 0),
-            2,
-            cv2.LINE_AA
-        )
-
-        table.append(
-            {
-                "No": idx,
-                "Class": cls_id,
-                "Confidence": round(conf, 4),
-                "X1": int(x1),
-                "Y1": int(y1),
-                "X2": int(x2),
-                "Y2": int(y2),
-                "Width": int(x2 - x1),
-                "Height": int(y2 - y1)
-            }
-        )
-
-    return output, count, table
-
-
-if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
+if uploaded is not None:
+    image = Image.open(uploaded).convert("RGB")
     image_rgb = np.array(image)
 
-    if not Path(weight_path).exists():
-        st.warning(
-            f"Model belum ditemukan di `{weight_path}`. "
-            "Latih model terlebih dahulu dengan `python train_yolo.py`, "
-            "lalu salin `runs/detect/protozoa_yolo/weights/best.pt` ke folder `weights/best.pt`."
-        )
+    result = template_match_protozoa(
+        image_rgb,
+        threshold=threshold,
+        min_distance=min_distance,
+        min_scale=min_scale,
+        max_scale=max_scale
+    )
 
-        st.image(image_rgb, caption="Gambar input", use_container_width=True)
-        st.stop()
-
-    model = load_model(weight_path)
-
-    with st.spinner("YOLO sedang mendeteksi protozoa..."):
-        results = model.predict(
-            source=image_rgb,
-            conf=confidence,
-            iou=iou,
-            imgsz=imgsz,
-            verbose=False
-        )
-
-    output, count, table = draw_boxes(image_rgb, results)
+    output = draw_detections(image_rgb, result["detections"])
 
     col1, col2 = st.columns(2)
 
@@ -187,13 +103,37 @@ if uploaded_file is not None:
         st.image(image_rgb, use_container_width=True)
 
     with col2:
-        st.subheader("Hasil Deteksi YOLO")
+        st.subheader("Hasil Deteksi")
         st.image(output, use_container_width=True)
 
-    st.success(f"Jumlah protozoa terdeteksi: {count}")
+    st.success(f"Jumlah protozoa terdeteksi: {result['count']}")
+
+    st.info(
+        "Untuk sample hijau yang kamu kirim, targetnya 29. "
+        "Default yang disarankan: Threshold 0.55 dan Jarak minimum 45. "
+        "Jika hasil kurang dari 29, turunkan Threshold ke 0.52. "
+        "Jika hasil lebih dari 29, naikkan Threshold ke 0.57–0.60."
+    )
+
+    if show_quality:
+        st.subheader("Analisis Kualitas Gambar")
+        for status, message in image_quality_report(image_rgb):
+            if status == "baik":
+                st.success(message)
+            elif status == "cukup":
+                st.warning(message)
+            else:
+                st.error(message)
+
+    if show_debug:
+        st.subheader("Debug Visual")
+        st.write(
+            "Saliency yang baik membuat badan protozoa terlihat terang, sedangkan background lebih redup."
+        )
+        st.image(make_debug_grid(result["debug"]), use_container_width=True)
 
     with st.expander("Data Deteksi"):
-        st.dataframe(table, use_container_width=True)
+        st.dataframe(result["table"], use_container_width=True)
 
 else:
     st.warning("Silakan upload gambar protozoa terlebih dahulu.")

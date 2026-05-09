@@ -1,142 +1,36 @@
-# YOLO Deteksi dan Penghitung Jumlah Protozoa
+# Deteksi Protozoa Template Oval v7
 
-Package ini dibuat untuk deteksi protozoa menggunakan YOLO.
+Versi ini memakai **multi-angle oval template matching**.
 
-Footer aplikasi:
+Metode ini dibuat untuk sample protozoa berbentuk oval/daun, termasuk gambar hijau/kebiruan dengan target **29 protozoa**.
 
-**Created by Galuh Adi Insani**
-
-## Kenapa YOLO?
-
-YOLO lebih cocok untuk deteksi terbaik karena model bisa belajar langsung dari contoh gambar protozoa yang sudah diberi label. Dibanding threshold, contour, watershed, atau template matching, YOLO lebih tahan terhadap variasi:
-
-- warna protozoa,
-- ukuran objek,
-- bentuk objek,
-- pencahayaan,
-- background,
-- objek menempel,
-- noise mikroskop.
-
-## Struktur Folder
-
-```txt
-protozoa_yolo_detector/
-├── app.py
-├── train_yolo.py
-├── predict_cli.py
-├── data.yaml
-├── requirements.txt
-├── README.md
-├── weights/
-│   └── best.pt                 # simpan model hasil training di sini
-├── datasets/
-│   └── protozoa/
-│       ├── images/
-│       │   ├── train/
-│       │   └── val/
-│       └── labels/
-│           ├── train/
-│           └── val/
-├── sample_images/
-└── outputs/
-```
-
-## 1. Install Package
+## Jalankan Streamlit
 
 ```bash
 pip install -r requirements.txt
-```
-
-## 2. Label Dataset
-
-Gunakan salah satu tool labeling:
-
-- LabelImg
-- CVAT
-- Roboflow
-- makesense.ai
-
-Format label harus **YOLO txt**.
-
-Contoh struktur label:
-
-```txt
-datasets/protozoa/images/train/gambar001.jpg
-datasets/protozoa/labels/train/gambar001.txt
-```
-
-Isi label YOLO:
-
-```txt
-0 x_center y_center width height
-```
-
-Semua nilai koordinat harus normalized dari 0 sampai 1.
-
-## 3. Aturan Labeling Protozoa
-
-Agar model tidak salah menghitung:
-
-1. Label **satu badan protozoa utuh**.
-2. Jangan label tekstur/organ kecil di dalam badan.
-3. Jangan label noise, debris, gelembung, atau bercak.
-4. Label protozoa yang menempel sebagai objek terpisah jika secara visual masih terlihat sebagai individu berbeda.
-5. Label protozoa di pinggir gambar jika memang ingin ikut dihitung.
-6. Gunakan class `protozoa` saja.
-
-## 4. Training YOLO
-
-```bash
-python train_yolo.py
-```
-
-Model terbaik akan muncul di:
-
-```txt
-runs/detect/protozoa_yolo/weights/best.pt
-```
-
-Salin ke:
-
-```txt
-weights/best.pt
-```
-
-## 5. Jalankan Aplikasi Streamlit
-
-```bash
 streamlit run app.py
 ```
 
-## 6. Jalankan CLI
+## Jalankan CLI
 
 ```bash
-python predict_cli.py sample_images/gambar.jpg --weights weights/best.pt --output outputs/hasil.jpg
+python count_cli.py protozoa_green_sample_29.jpg --output hasil.jpg
 ```
 
-## Rekomendasi Dataset
+## Setting default untuk sample hijau target 29
 
-Untuk hasil awal:
-- minimal 50 gambar berlabel.
+```txt
+Threshold kemiripan bentuk: 0.55
+Jarak minimum antar protozoa: 45
+Skala minimum objek: 0.85
+Skala maksimum objek: 1.15
+```
 
-Untuk hasil cukup baik:
-- 100–300 gambar berlabel.
+## Tips tuning
 
-Untuk hasil lebih stabil:
-- 500+ gambar berlabel dari berbagai kondisi mikroskop.
-
-## Tips Parameter
-
-Di aplikasi:
-
-- Jika protozoa kurang terdeteksi, turunkan **Confidence threshold**.
-- Jika terlalu banyak false positive, naikkan **Confidence threshold**.
-- Jika objek rapat sering hilang, naikkan sedikit **IoU threshold**.
-- Jika objek kecil sulit terdeteksi, naikkan **Ukuran input YOLO** ke 960 atau 1280.
-
-## Catatan Penting
-
-File `weights/best.pt` belum disertakan karena harus dibuat dari hasil training dataset protozoa milikmu. Tanpa model hasil training, YOLO tidak akan mengetahui bentuk protozoa yang ingin dihitung.
+- Jika hasil kurang dari target: turunkan Threshold ke 0.52.
+- Jika hasil terlalu banyak: naikkan Threshold ke 0.57–0.60.
+- Jika satu protozoa terhitung ganda: naikkan Jarak minimum.
+- Jika protozoa rapat belum terpisah: turunkan Jarak minimum.
 
 Created by Galuh Adi Insani
