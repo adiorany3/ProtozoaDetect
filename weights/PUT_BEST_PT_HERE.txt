@@ -1,0 +1,1 @@
+Setelah training, salin runs/detect/protozoa_yolo/weights/best.pt ke folder ini dan beri nama best.pt
