@@ -1,35 +1,25 @@
-# Deteksi Protozoa Color Body v3
+# Deteksi Protozoa Whole Body v5
 
-Versi ini diperbaiki untuk sample protozoa yang memiliki badan hijau/kebiruan di background abu-abu.
+Versi ini memperbaiki deteksi agar lebih fokus pada **satu badan protozoa utuh**, bukan bercak/tekstur internal.
 
-Fokus utama: **menghitung badan protozoa utuh**, bukan tekstur internal.
-
-Footer aplikasi:
-
-**Created by Galuh Adi Insani**
-
-## Cara Menjalankan
+## Jalankan
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Cara CLI
+## CLI
 
 ```bash
 python count_cli.py protozoa_sample.jpg --output hasil.jpg
 ```
 
-Jika jumlah masih 0:
+## Tips tuning
 
-```bash
-python count_cli.py protozoa_sample.jpg --threshold 35 --output hasil.jpg
-```
+- Jika protozoa belum terdeteksi: turunkan **Ambang badan** ke 20.
+- Jika bercak kecil ikut terhitung: naikkan **Ukuran minimum badan**.
+- Jika protozoa menempel belum terpisah: turunkan **Kekuatan pemisahan**.
+- Jika satu badan protozoa pecah: naikkan **Gabungkan bagian badan** dan **Kekuatan pemisahan**.
 
-## Tips Pengaturan
-
-- Jika tidak terdeteksi: turunkan **Ambang warna/badan** ke 35–40.
-- Jika bagian kecil tubuh ikut dihitung: naikkan **Ukuran minimum badan**.
-- Jika satu protozoa terpecah: naikkan **Penggabungan bagian tubuh**.
-- Jika protozoa menempel belum terpisah: turunkan sedikit **Kekuatan pemisahan**.
+Created by Galuh Adi Insani

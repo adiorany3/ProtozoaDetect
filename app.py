@@ -2,164 +2,128 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
-from detector import (
-    count_protozoa,
-    draw_detections,
-    make_debug_grid,
-    image_quality_report
-)
+from detector import count_protozoa, draw_detections, make_debug_grid, image_quality_report
 
 
-st.set_page_config(
-    page_title="Deteksi Jumlah Protozoa",
-    page_icon="🔬",
-    layout="wide"
-)
+st.set_page_config(page_title="Deteksi Jumlah Protozoa", page_icon="🔬", layout="wide")
 
 FOOTER = "Created by Galuh Adi Insani"
 
-st.title("🔬 Sistem Deteksi dan Penghitung Jumlah Protozoa")
+st.title("🔬 Deteksi Jumlah Protozoa — Whole Body v5")
 st.write(
-    "Versi ini diperbaiki untuk sample protozoa yang kamu kirim. "
-    "Deteksi difokuskan ke **badan protozoa utuh**, bukan bercak/tekstur kecil di dalam badannya."
+    "Versi ini memperbaiki masalah protozoa belum terhitung sempurna dengan pendekatan "
+    "**whole body + color saliency + split objek menempel**. Fokusnya menghitung satu badan protozoa utuh, "
+    "bukan bercak/tekstur di dalam badan."
 )
 
-with st.expander("📌 Keterangan gambar yang baik agar hasil lebih presisi", expanded=True):
+with st.expander("📌 Keterangan gambar yang baik", expanded=True):
     st.markdown(
         """
-        Gunakan gambar dengan:
-        1. **Fokus jelas**, tepi badan protozoa terlihat.
-        2. **Kontras cukup**, badan protozoa berbeda dari background.
-        3. **Pencahayaan merata**, tidak terlalu gelap/terlalu terang.
-        4. **Background bersih**, minim kotoran, gelembung, dan debris.
-        5. **Objek tidak terlalu bertumpuk**.
-        6. **Resolusi cukup**, minimal 300 px pada sisi terpendek.
-        7. **Pembesaran konsisten**.
+        Agar hasil lebih presisi:
+        1. Badan protozoa terlihat fokus dan tepinya jelas.
+        2. Kontras antara protozoa dan background cukup.
+        3. Pencahayaan rata, tidak terlalu gelap/terang.
+        4. Background bersih dari debris/gelembung.
+        5. Objek tidak terlalu bertumpuk.
+        6. Resolusi minimal 300 px pada sisi terpendek.
+        7. Pembesaran mikroskop konsisten.
         """
     )
 
-uploaded_file = st.file_uploader(
-    "Upload gambar mikroskop protozoa",
-    type=["jpg", "jpeg", "png"]
-)
+uploaded = st.file_uploader("Upload gambar protozoa", type=["jpg", "jpeg", "png"])
 
-st.sidebar.header("⚙️ Pengaturan Deteksi")
-
-threshold_value = st.sidebar.slider(
-    "Ambang warna/badan",
-    min_value=20,
-    max_value=90,
-    value=45,
-    step=1,
-    help="Turunkan jika tidak ada protozoa terdeteksi. Naikkan jika background/noise ikut terdeteksi."
+st.sidebar.header("⚙️ Pengaturan")
+body_threshold = st.sidebar.slider(
+    "Ambang badan",
+    10, 80, 25, 1,
+    help="Turunkan jika protozoa belum terdeteksi. Naikkan jika background/noise ikut terdeteksi."
 )
 
 merge_strength = st.sidebar.slider(
-    "Penggabungan bagian tubuh",
-    min_value=0.50,
-    max_value=2.50,
-    value=1.25,
-    step=0.05,
-    help="Naikkan jika satu protozoa masih pecah menjadi beberapa deteksi."
+    "Gabungkan bagian badan",
+    0.40, 2.00, 0.85, 0.05,
+    help="Naikkan jika satu protozoa terpecah. Turunkan jika banyak protozoa menempel menjadi satu."
+)
+
+split_touching = st.sidebar.checkbox("Pisahkan protozoa yang menempel", value=True)
+
+split_strength = st.sidebar.slider(
+    "Kekuatan pemisahan",
+    0.20, 0.60, 0.34, 0.01,
+    help="Turunkan jika protozoa menempel belum terpisah. Naikkan jika badan protozoa pecah."
 )
 
 min_area_ratio = st.sidebar.slider(
     "Ukuran minimum badan",
-    min_value=0.00020,
-    max_value=0.00500,
-    value=0.00100,
-    step=0.00010,
-    format="%.5f",
-    help="Naikkan jika bagian dalam tubuh/noise masih ikut dihitung."
+    0.00020, 0.00300, 0.00055, 0.00005, format="%.5f",
+    help="Naikkan jika bercak kecil masih ikut dihitung."
 )
 
 max_area_ratio = st.sidebar.slider(
     "Ukuran maksimum badan",
-    min_value=0.005,
-    max_value=0.120,
-    value=0.060,
-    step=0.005,
-    format="%.3f",
-    help="Turunkan jika cluster besar ikut dihitung sebagai satu objek."
+    0.010, 0.120, 0.070, 0.005, format="%.3f",
+    help="Turunkan jika cluster besar ikut dihitung."
 )
 
-split_touching = st.sidebar.checkbox(
-    "Pisahkan protozoa yang menempel",
-    value=True
-)
-
-split_strength = st.sidebar.slider(
-    "Kekuatan pemisahan",
-    min_value=0.25,
-    max_value=0.70,
-    value=0.48,
-    step=0.01,
-    help="Naikkan agar tidak memecah badan. Turunkan jika protozoa menempel belum terpisah."
-)
+count_edge_objects = st.sidebar.checkbox("Hitung protozoa di pinggir gambar", value=True)
 
 show_debug = st.checkbox("Tampilkan proses deteksi", value=True)
 show_quality = st.checkbox("Tampilkan analisis kualitas gambar", value=True)
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
+if uploaded is not None:
+    image = Image.open(uploaded).convert("RGB")
     image_rgb = np.array(image)
 
     result = count_protozoa(
         image_rgb,
-        threshold_value=threshold_value,
+        body_threshold=body_threshold,
         merge_strength=merge_strength,
+        split_touching=split_touching,
+        split_strength=split_strength,
         min_area_ratio=min_area_ratio,
         max_area_ratio=max_area_ratio,
-        split_touching=split_touching,
-        split_strength=split_strength
+        count_edge_objects=count_edge_objects
     )
 
     output = draw_detections(image_rgb, result["detections"])
 
-    col1, col2 = st.columns(2)
+    c1, c2 = st.columns(2)
 
-    with col1:
+    with c1:
         st.subheader("Gambar Asli")
         st.image(image_rgb, use_container_width=True)
 
-    with col2:
+    with c2:
         st.subheader("Hasil Deteksi")
         st.image(output, use_container_width=True)
 
     st.success(f"Jumlah protozoa terdeteksi: {result['count']}")
 
     st.info(
-        "Jika jumlah masih 0, turunkan **Ambang warna/badan** ke 35–40. "
-        "Jika bagian dalam badan masih ikut dihitung, naikkan **Ukuran minimum badan** dan "
-        "**Penggabungan bagian tubuh**."
+        "Untuk sample yang kamu kirim, coba default dulu. Jika masih kurang, turunkan **Ambang badan** ke 20. "
+        "Jika bagian kecil ikut terhitung, naikkan **Ukuran minimum badan**."
     )
 
     if show_quality:
         st.subheader("Analisis Kualitas Gambar")
-        for item in image_quality_report(image_rgb):
-            if item["status"] == "baik":
-                st.success(item["message"])
-            elif item["status"] == "cukup":
-                st.warning(item["message"])
+        for status, msg in image_quality_report(image_rgb):
+            if status == "baik":
+                st.success(msg)
+            elif status == "cukup":
+                st.warning(msg)
             else:
-                st.error(item["message"])
+                st.error(msg)
 
     if show_debug:
         st.subheader("Debug Visual")
-        st.write(
-            "Yang paling penting dilihat adalah **Whole Body Mask** dan **Separated Mask**. "
-            "Mask yang baik menutup satu badan protozoa secara utuh."
-        )
+        st.write("Cek **Whole Body Mask** dan **Separated Mask**. Mask yang baik menutup satu protozoa sebagai satu objek.")
         st.image(make_debug_grid(result["debug"]), use_container_width=True)
 
-    with st.expander("Data Deteksi Protozoa"):
+    with st.expander("Data Deteksi"):
         st.dataframe(result["table"], use_container_width=True)
 
 else:
-    st.warning("Silakan upload gambar mikroskop protozoa terlebih dahulu.")
+    st.warning("Silakan upload gambar protozoa terlebih dahulu.")
 
 st.markdown("---")
-st.markdown(
-    f"""<div style="text-align:center; color:gray; font-size:14px;">{FOOTER}</div>""",
-    unsafe_allow_html=True
-)
+st.markdown(f"<div style='text-align:center;color:gray;font-size:14px'>{FOOTER}</div>", unsafe_allow_html=True)
