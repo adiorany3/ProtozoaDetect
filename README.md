@@ -1,4 +1,4 @@
-# Deteksi Protozoa Multi-Sample v6
+# Deteksi Protozoa
 
 Versi ini mendukung:
 - protozoa hijau/kebiruan,
