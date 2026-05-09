@@ -9,11 +9,10 @@ st.set_page_config(page_title="Deteksi Jumlah Protozoa", page_icon="🔬", layou
 
 FOOTER = "Created by Galuh Adi Insani"
 
-st.title("🔬 Deteksi Jumlah Protozoa — Whole Body v5")
+st.title("🔬 Deteksi Jumlah Protozoa — Multi-Sample v6")
 st.write(
-    "Versi ini memperbaiki masalah protozoa belum terhitung sempurna dengan pendekatan "
-    "**whole body + color saliency + split objek menempel**. Fokusnya menghitung satu badan protozoa utuh, "
-    "bukan bercak/tekstur di dalam badan."
+    "Versi ini dibuat untuk dua tipe sample: protozoa hijau/kebiruan dan protozoa coklat/abu-abu. "
+    "Sistem menghitung **badan protozoa utuh**, bukan tekstur internal."
 )
 
 with st.expander("📌 Keterangan gambar yang baik", expanded=True):
@@ -22,10 +21,10 @@ with st.expander("📌 Keterangan gambar yang baik", expanded=True):
         Agar hasil lebih presisi:
         1. Badan protozoa terlihat fokus dan tepinya jelas.
         2. Kontras antara protozoa dan background cukup.
-        3. Pencahayaan rata, tidak terlalu gelap/terang.
+        3. Pencahayaan rata.
         4. Background bersih dari debris/gelembung.
         5. Objek tidak terlalu bertumpuk.
-        6. Resolusi minimal 300 px pada sisi terpendek.
+        6. Gunakan resolusi lebih besar jika memungkinkan.
         7. Pembesaran mikroskop konsisten.
         """
     )
@@ -35,14 +34,14 @@ uploaded = st.file_uploader("Upload gambar protozoa", type=["jpg", "jpeg", "png"
 st.sidebar.header("⚙️ Pengaturan")
 body_threshold = st.sidebar.slider(
     "Ambang badan",
-    10, 80, 25, 1,
-    help="Turunkan jika protozoa belum terdeteksi. Naikkan jika background/noise ikut terdeteksi."
+    10, 80, 28, 1,
+    help="Turunkan jika protozoa belum terdeteksi. Naikkan jika background ikut terdeteksi."
 )
 
 merge_strength = st.sidebar.slider(
     "Gabungkan bagian badan",
-    0.40, 2.00, 0.85, 0.05,
-    help="Naikkan jika satu protozoa terpecah. Turunkan jika banyak protozoa menempel menjadi satu."
+    0.40, 2.00, 0.80, 0.05,
+    help="Naikkan jika badan protozoa pecah. Turunkan jika protozoa berdekatan menyatu."
 )
 
 split_touching = st.sidebar.checkbox("Pisahkan protozoa yang menempel", value=True)
@@ -50,18 +49,18 @@ split_touching = st.sidebar.checkbox("Pisahkan protozoa yang menempel", value=Tr
 split_strength = st.sidebar.slider(
     "Kekuatan pemisahan",
     0.20, 0.60, 0.34, 0.01,
-    help="Turunkan jika protozoa menempel belum terpisah. Naikkan jika badan protozoa pecah."
+    help="Turunkan jika protozoa menempel belum terpisah. Naikkan jika satu badan pecah."
 )
 
 min_area_ratio = st.sidebar.slider(
     "Ukuran minimum badan",
-    0.00020, 0.00300, 0.00055, 0.00005, format="%.5f",
-    help="Naikkan jika bercak kecil masih ikut dihitung."
+    0.00010, 0.00300, 0.00035, 0.00005, format="%.5f",
+    help="Naikkan jika bercak kecil/noise ikut dihitung."
 )
 
 max_area_ratio = st.sidebar.slider(
     "Ukuran maksimum badan",
-    0.010, 0.120, 0.070, 0.005, format="%.3f",
+    0.010, 0.150, 0.090, 0.005, format="%.3f",
     help="Turunkan jika cluster besar ikut dihitung."
 )
 
@@ -88,7 +87,6 @@ if uploaded is not None:
     output = draw_detections(image_rgb, result["detections"])
 
     c1, c2 = st.columns(2)
-
     with c1:
         st.subheader("Gambar Asli")
         st.image(image_rgb, use_container_width=True)
@@ -100,8 +98,9 @@ if uploaded is not None:
     st.success(f"Jumlah protozoa terdeteksi: {result['count']}")
 
     st.info(
-        "Untuk sample yang kamu kirim, coba default dulu. Jika masih kurang, turunkan **Ambang badan** ke 20. "
-        "Jika bagian kecil ikut terhitung, naikkan **Ukuran minimum badan**."
+        "Untuk sample coklat yang kamu kirim targetnya 4. "
+        "Jika kurang dari 4, turunkan **Ambang badan** ke 20–25. "
+        "Jika lebih dari 4, naikkan **Ukuran minimum badan** atau **Ambang badan**."
     )
 
     if show_quality:
@@ -116,7 +115,7 @@ if uploaded is not None:
 
     if show_debug:
         st.subheader("Debug Visual")
-        st.write("Cek **Whole Body Mask** dan **Separated Mask**. Mask yang baik menutup satu protozoa sebagai satu objek.")
+        st.write("Cek **Whole Body Mask** dan **Separated Mask**. Mask bagus = satu protozoa menjadi satu objek utuh.")
         st.image(make_debug_grid(result["debug"]), use_container_width=True)
 
     with st.expander("Data Deteksi"):
