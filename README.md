@@ -1,27 +1,36 @@
-# Deteksi Protozoa
+# Deteksi Protozoa Template Oval v7
 
-Versi ini mendukung:
-- protozoa hijau/kebiruan,
-- protozoa coklat/abu-abu seperti sample dengan target 4 protozoa.
+Versi ini memakai **multi-angle oval template matching**.
 
-## Jalankan
+Metode ini dibuat untuk sample protozoa berbentuk oval/daun, termasuk gambar hijau/kebiruan dengan target **29 protozoa**.
+
+## Jalankan Streamlit
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## CLI
+## Jalankan CLI
 
 ```bash
-python count_cli.py protozoa_brown_sample_4.jpeg --output hasil.jpg
+python count_cli.py protozoa_green_sample_29.jpg --output hasil.jpg
+```
+
+## Setting default untuk sample hijau target 29
+
+```txt
+Threshold kemiripan bentuk: 0.55
+Jarak minimum antar protozoa: 45
+Skala minimum objek: 0.85
+Skala maksimum objek: 1.15
 ```
 
 ## Tips tuning
 
-- Jika kurang terdeteksi: turunkan **Ambang badan** ke 20–25.
-- Jika terlalu banyak: naikkan **Ukuran minimum badan** atau **Ambang badan**.
-- Jika protozoa menempel belum terpisah: turunkan **Kekuatan pemisahan**.
-- Jika satu badan pecah: naikkan **Gabungkan bagian badan**.
+- Jika hasil kurang dari target: turunkan Threshold ke 0.52.
+- Jika hasil terlalu banyak: naikkan Threshold ke 0.57–0.60.
+- Jika satu protozoa terhitung ganda: naikkan Jarak minimum.
+- Jika protozoa rapat belum terpisah: turunkan Jarak minimum.
 
 Created by Galuh Adi Insani
