@@ -18,7 +18,7 @@ st.set_page_config(
 
 FOOTER = "Created by Galuh Adi Insani"
 
-st.title("🔬 Deteksi Jumlah Protozoa — Template Oval v7")
+st.title("🔬 Deteksi Jumlah Protozoa")
 st.write(
     "Versi ini memakai **multi-angle oval template matching**. "
     "Metode ini lebih cocok untuk protozoa berbentuk oval/daun dan mengurangi kesalahan menghitung tekstur di dalam badan."
